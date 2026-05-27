@@ -9,8 +9,8 @@
 #property strict
 
 //--- Inputs
-input string ServerURL          = "http://127.0.0.1:4000/api/ingest"; // ingest endpoint
-input string ClearURL           = "http://127.0.0.1:4000/api/clear";  // wipe endpoint
+input string ServerURL          = "https://cms.khojdex.com/api/ingest"; // ingest endpoint
+input string ClearURL           = "https://cms.khojdex.com/api/clear";  // wipe endpoint
 input string IngestToken        = "dev-token";       // must match backend INGEST_TOKEN
 input bool   Enable_H1          = true;              // produce H1
 input bool   Enable_H4          = true;              // produce H4
@@ -22,6 +22,7 @@ input int    BackfillYears      = 2;                 // history to backfill per 
 input int    BatchSize          = 400;               // snapshots per POST
 input bool   DoBackfillOnStart  = true;              // backfill history at startup
 input bool   WipeBeforeBackfill = false;             // clear each TF first (first real run)
+input int    LivePushSeconds    = 30;                // push current forming bar every N sec (0=off)
 
 //--- Universe
 string Currencies[8] = {"USD","EUR","CHF","CAD","NZD","JPY","AUD","GBP"};
@@ -47,6 +48,7 @@ bool     pairOK[28];
 int      baseIdx[28], quoteIdx[28];
 string   g_refSym = "EURUSD";          // reference symbol for the bar timeline
 datetime g_lastBar[3];
+datetime g_lastLivePush[3];
 bool     g_backfilled = false;
 string   g_ingestURL, g_clearURL;      // resolved URLs (localhost -> 127.0.0.1)
 
@@ -80,7 +82,7 @@ int OnInit()
       }
       if(!pairOK[p]) PrintFormat("WARN: pair %s currency map failed — skipped", Pairs[p]);
    }
-   for(int t=0;t<3;t++) g_lastBar[t]=0;
+   for(int t=0;t<3;t++) { g_lastBar[t]=0; g_lastLivePush[t]=0; }
 
    PrintFormat("CSM_Producer v2 init: TFs=[%s%s%s] server=%s",
                (Enable_H1?"H1 ":""),(Enable_H4?"H4 ":""),(Enable_D1?"D1":""), ServerURL);
@@ -204,12 +206,12 @@ double EMAat(int handle,int shift)
 { double v[]; if(shift<0) return EMPTY_VALUE; if(CopyBuffer(handle,0,shift,1,v)==1) return v[0]; return EMPTY_VALUE; }
 
 //+------------------------------------------------------------------+
-//| Push the most recently closed bar for a timeframe                 |
+//| Push one bar for a timeframe — shift=0 (live forming), shift=1 (just closed) |
 //+------------------------------------------------------------------+
-void PushClosedBar(int tfi)
+void PushBar(int tfi, int shift)
 {
    ENUM_TIMEFRAMES tf = AllTF[tfi];
-   datetime t = iTime(g_refSym, tf, 1);
+   datetime t = iTime(g_refSym, tf, shift);
    if(t<=0) return;
    int vals[8]; for(int c=0;c<8;c++) vals[c]=0;
    for(int p=0;p<28;p++)
@@ -224,7 +226,7 @@ void PushClosedBar(int tfi)
       vals[quoteIdx[p]] -= tr;
    }
    if(PostJSON(g_ingestURL, SnapshotJSON(tfi,t,vals)))
-      PrintFormat("Pushed %s bar %s", AllLabel[tfi], TimeToString(t));
+      PrintFormat("Pushed %s %s %s", AllLabel[tfi], (shift==0?"LIVE":"closed"), TimeToString(t));
 }
 
 //+------------------------------------------------------------------+
@@ -238,12 +240,17 @@ void OnTimer()
       Print("CSM_Producer: backfill complete, now streaming closed bars.");
       return;
    }
+   datetime now = TimeCurrent();
    for(int t=0;t<3;t++)
    {
       if(!tfActive[t]) continue;
       datetime cur = iTime(g_refSym, AllTF[t], 0);
-      if(cur>0 && g_lastBar[t]!=0 && cur!=g_lastBar[t]) PushClosedBar(t);
+      // closed-bar push when a new bar forms
+      if(cur>0 && g_lastBar[t]!=0 && cur!=g_lastBar[t]) PushBar(t, 1);
       if(cur>0) g_lastBar[t]=cur;
+      // live (forming) bar push every LivePushSeconds
+      if(LivePushSeconds>0 && (now - g_lastLivePush[t]) >= LivePushSeconds)
+      { PushBar(t, 0); g_lastLivePush[t] = now; }
    }
 }
 //+------------------------------------------------------------------+

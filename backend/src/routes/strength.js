@@ -45,13 +45,18 @@ router.get('/strength', async (req, res) => {
   }
 });
 
-// GET /api/strength/latest?tf=D1  — most recent snapshot (for the live ranking)
+// GET /api/strength/latest?tf=D1[&n=N]
+//   default: single doc (backward compat)
+//   with n=N (1..10): { count, data:[newest,...] } — useful for "live + last closed" panels
 router.get('/strength/latest', async (req, res) => {
   const tf = (req.query.tf || 'D1').toUpperCase();
   if (!TIMEFRAMES.includes(tf)) return res.status(400).json({ error: `invalid tf: ${tf}` });
+  const nRaw = req.query.n;
+  const n = Math.max(1, Math.min(Number(nRaw) || 1, 10));
   try {
-    const doc = await Strength.findOne({ tf }, { _id: 0 }).sort({ ts: -1 }).lean();
-    res.json(doc || null);
+    const docs = await Strength.find({ tf }, { _id: 0 }).sort({ ts: -1 }).limit(n).lean();
+    if (nRaw != null) return res.json({ count: docs.length, data: docs });
+    res.json(docs[0] || null);
   } catch (e) {
     res.status(500).json({ error: 'query failed' });
   }

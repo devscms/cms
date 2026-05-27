@@ -126,9 +126,11 @@
     </div>
   </div>
   <aside class="sidebar">
-    <div class="s-head"><h3>Strength Ranking</h3><span id="rank-ts"></span></div>
-    <div id="ranking"></div>
-    <div class="s-head" style="margin-top:24px"><h3>Suggested Pair</h3></div>
+    <div class="s-head"><h3>Live</h3><span id="live-ts"></span></div>
+    <div id="live-ranking"></div>
+    <div class="s-head" style="margin-top:18px"><h3>Last Closed</h3><span id="closed-ts"></span></div>
+    <div id="closed-ranking"></div>
+    <div class="s-head" style="margin-top:18px"><h3>Suggested Pair</h3></div>
     <div id="bestpair"></div>
     <div class="hint">
       <b>Legend</b> — click to toggle currency<br>
@@ -274,13 +276,17 @@ function setDefaultWindow(){
   document.getElementById('to').value=new Date(endTs).toISOString().slice(0,10);
 }
 function valueAt(arr,ts){let b=arr[0];for(const p of arr){if(p[0]<=ts)b=p;else break;}return b[1];}
-function updateRanking(){
-  const dz=chart.getOption().dataZoom[0],arr0=DATA[CURRENCIES[0].code];
-  let edge=arr0[arr0.length-1][0];if(dz.endValue!=null)edge=dz.endValue;
-  const rows=CURRENCIES.map(c=>({code:c.code,color:c.color,val:valueAt(DATA[c.code],edge)}));
-  rows.sort((a,b)=>b.val-a.val);
-  document.getElementById('ranking').innerHTML=rows.map((r,i)=>{
-    const pct=Math.abs(r.val)/7*50,pos=r.val>=0;
+// Render one snapshot's ranking rows into a panel. Returns sorted rows.
+function renderRankingPanel(snapshot, panelId, tsId){
+  const panel=document.getElementById(panelId), ts=document.getElementById(tsId);
+  if(!snapshot){
+    if(panel) panel.innerHTML='<div style="color:var(--dim);font-size:11px;padding:6px 4px">no data</div>';
+    if(ts) ts.textContent='';
+    return null;
+  }
+  const rows=CURRENCIES.map(c=>({code:c.code,color:c.color,val:snapshot[c.code]||0})).sort((a,b)=>b.val-a.val);
+  panel.innerHTML=rows.map((r,i)=>{
+    const pct=Math.min(50, Math.abs(r.val)/7*50), pos=r.val>=0;
     const bar=pos?`left:50%;width:${pct}%;background:${r.color}`:`right:50%;width:${pct}%;background:${r.color}`;
     const vc=r.val>0?'#3fb27f':(r.val<0?'#e2576a':'#7d828f');
     return `<div class="rank-row"><span class="pos">${i+1}</span>
@@ -289,14 +295,20 @@ function updateRanking(){
       <span class="bar"><i style="${bar}"></i></span>
       <span class="val" style="color:${vc}">${r.val>0?'+':''}${r.val}</span></div>`;
   }).join('');
-  document.getElementById('rank-ts').textContent=new Date(edge).toLocaleDateString([], {month:'short',day:'numeric'});
-  const s=rows[0],w=rows[rows.length-1];
-  document.getElementById('bestpair').innerHTML=`<div class="pair-card">
+  ts.textContent=new Date(snapshot.ts).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  return rows;
+}
+function renderSuggestedPair(rows){
+  const el=document.getElementById('bestpair'); if(!el) return;
+  if(!rows||!rows.length){ el.innerHTML=''; return; }
+  const s=rows[0], w=rows[rows.length-1];
+  el.innerHTML=`<div class="pair-card">
     <div class="big">${s.code}/${w.code}</div>
     <div class="sub">Strongest ${s.val>0?'+':''}${s.val} · Weakest ${w.val} · spread ${s.val-w.val}</div>
     <span class="action">BUY ${s.code}${w.code}</span></div>`;
-  updateEdgeLabels();
 }
+// Edge labels track the chart's visible right edge — chart-dependent (kept as updateRanking name for legacy callers)
+function updateRanking(){ updateEdgeLabels(); }
 // Collision-avoiding right-edge labels (push apart when values collide)
 function updateEdgeLabels(){
   const el=document.getElementById('edgeLabels'); if(!el)return;
@@ -335,6 +347,7 @@ async function reload(){
   loadedFrom = rows.length ? new Date(rows[0].ts).getTime() : fromMs;
   rebuildSmoothed();
   chart.setOption(buildOption(),true);setDefaultWindow();updateRanking();
+  await pollLatest();   // populate Live + Last Closed panels immediately
   showLoading(false);
 }
 document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
@@ -384,20 +397,35 @@ chart.on('dataZoom',onZoom);
 chart.on('legendselectchanged',updateRanking);
 window.addEventListener('resize',()=>{chart.resize();updateRanking();});
 // Poll latest snapshot — appends a new bar (or updates the current one) as MT5 pushes.
+// Fetch the 2 most recent snapshots — newest=live forming bar, second=last closed bar.
+// Also updates the chart's last bar with the newest data point.
 async function pollLatest(){
-  if(loading||loadingOlder) return;   // don't race a TF switch / history fetch
+  if(loading||loadingOlder) return;
   try{
-    const r=await fetch(`${API}/strength/latest?tf=${currentTF}`);
-    if(!r.ok)return; const d=await r.json(); if(!d)return;
-    const ms=new Date(d.ts).getTime();
-    const a0=DATA[CURRENCIES[0].code]; if(!a0||!a0.length)return;
-    const lastMs=a0[a0.length-1][0];
-    if(ms>lastMs) CURRENCIES.forEach(c=>DATA[c.code].push([ms,d[c.code]]));
-    else if(ms===lastMs) CURRENCIES.forEach(c=>DATA[c.code][DATA[c.code].length-1]=[ms,d[c.code]]);
-    else return;
-    rebuildSmoothed();
-    chart.setOption({series:CURRENCIES.map(c=>({name:c.code,data:SDATA[c.code]}))});
-    updateRanking();
+    const r=await fetch(`${API}/strength/latest?tf=${currentTF}&n=2`);
+    if(!r.ok) return;
+    const j=await r.json();
+    const docs=(j && j.data) || [];
+    const newest=docs[0], closed=docs[1];
+    // Update chart's last bar with newest snapshot
+    if(newest){
+      const ms=new Date(newest.ts).getTime();
+      const a0=DATA[CURRENCIES[0].code];
+      if(a0 && a0.length){
+        const lastMs=a0[a0.length-1][0];
+        if(ms>lastMs) CURRENCIES.forEach(c=>DATA[c.code].push([ms,newest[c.code]]));
+        else if(ms===lastMs) CURRENCIES.forEach(c=>DATA[c.code][DATA[c.code].length-1]=[ms,newest[c.code]]);
+        if(ms>=lastMs){
+          rebuildSmoothed();
+          chart.setOption({series:CURRENCIES.map(c=>({name:c.code,data:SDATA[c.code]}))});
+        }
+      }
+    }
+    // Render Live (newest = forming bar) + Last Closed (second-newest = just-closed bar)
+    const liveRows=renderRankingPanel(newest, 'live-ranking', 'live-ts');
+    renderRankingPanel(closed, 'closed-ranking', 'closed-ts');
+    renderSuggestedPair(liveRows);
+    updateEdgeLabels();
   }catch(e){}
 }
 setInterval(pollLatest,15000);
