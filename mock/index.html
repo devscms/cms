@@ -53,7 +53,7 @@
   .zoom-ctl button:hover{color:var(--text);border-color:#3a424d;background:var(--panel)}
   .live-line{position:absolute;top:50px;bottom:78px;width:0;
     border-left:1.5px dashed rgba(255,255,255,.32);pointer-events:none;z-index:3}
-  .live-line::before{content:'LIVE';position:absolute;top:-16px;left:-16px;
+  .live-line::before{content:'CLOSED';position:absolute;top:-16px;left:-22px;
     font:700 9px Inter;letter-spacing:.8px;color:rgba(255,255,255,.55);
     background:rgba(22,26,34,.85);padding:2px 5px;border-radius:3px}
   .loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
@@ -313,13 +313,23 @@ function renderSuggestedPair(rows){
     <div class="sub">Strongest ${s.val>0?'+':''}${s.val} · Weakest ${w.val} · spread ${s.val-w.val}</div>
     <span class="action">BUY ${s.code}${w.code}</span></div>`;
 }
-// Dashed vertical line marking the latest data point on the chart (always visible).
+// Dashed vertical line marking the LAST CLOSED bar (skips live forming bar if present).
 function updateLiveLine(){
   const el=document.getElementById('liveLine'); if(!el) return;
   const arr=DATA[CURRENCIES[0].code];
   if(!arr || !arr.length){ el.style.display='none'; return; }
-  const latestTs=arr[arr.length-1][0];
-  const x=chart.convertToPixel({xAxisIndex:0}, latestTs);
+  // If the latest data point falls within the current bar's open window (i.e., it's the live
+  // forming bar pushed by the producer), the "last closed" is the previous point.
+  let ts;
+  if(arr.length >= 2){
+    const stepMs = TF_CFG[currentTF].stepMs;
+    const barOpenMs = Math.floor(Date.now() / stepMs) * stepMs;
+    const latestTs = arr[arr.length-1][0];
+    ts = (latestTs >= barOpenMs) ? arr[arr.length-2][0] : latestTs;
+  } else {
+    ts = arr[0][0];
+  }
+  const x=chart.convertToPixel({xAxisIndex:0}, ts);
   const w=chart.getWidth();
   if(x==null || isNaN(x) || x<0 || x>w){ el.style.display='none'; return; }
   el.style.left = x + 'px';
