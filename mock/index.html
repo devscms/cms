@@ -51,17 +51,11 @@
     border:1px solid var(--border2);color:var(--muted);font:600 16px Inter;cursor:pointer;
     display:grid;place-items:center;transition:.12s}
   .zoom-ctl button:hover{color:var(--text);border-color:#3a424d;background:var(--panel)}
-  .chart-edge-bars{position:absolute;top:54px;right:54px;width:138px;
-    background:rgba(22,26,34,.88);border:1px solid var(--border);border-radius:9px;
-    padding:6px 7px;z-index:4;pointer-events:none;font:500 11px Inter;
-    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
-  .chart-edge-bars .row{display:flex;align-items:center;gap:6px;padding:3px 2px}
-  .chart-edge-bars .row+.row{border-top:1px solid rgba(255,255,255,.04)}
-  .chart-edge-bars .code{font-weight:700;width:30px;letter-spacing:.3px}
-  .chart-edge-bars .bar{flex:1;height:3px;border-radius:2px;background:rgba(0,0,0,.35);
-    position:relative;overflow:hidden}
-  .chart-edge-bars .bar i{position:absolute;top:0;bottom:0;border-radius:2px}
-  .chart-edge-bars .val{width:22px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+  .live-line{position:absolute;top:50px;bottom:78px;width:0;
+    border-left:1.5px dashed rgba(255,255,255,.32);pointer-events:none;z-index:3}
+  .live-line::before{content:'LIVE';position:absolute;top:-16px;left:-16px;
+    font:700 9px Inter;letter-spacing:.8px;color:rgba(255,255,255,.55);
+    background:rgba(22,26,34,.85);padding:2px 5px;border-radius:3px}
   .loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
     background:rgba(14,17,23,.55);z-index:5;font:600 13px Inter;color:var(--muted)}
   .loading.on{display:flex}
@@ -129,7 +123,7 @@
     <div class="chart-card">
       <div id="chart"></div>
       <div class="edge-labels" id="edgeLabels"></div>
-      <div class="chart-edge-bars" id="chartEdgeBars"></div>
+      <div class="live-line" id="liveLine" style="display:none"></div>
       <div class="loading" id="loading"><span class="spin"></span>Loading…</div>
       <div class="zoom-ctl">
         <button id="zin" title="Zoom in">+</button>
@@ -319,29 +313,20 @@ function renderSuggestedPair(rows){
     <div class="sub">Strongest ${s.val>0?'+':''}${s.val} · Weakest ${w.val} · spread ${s.val-w.val}</div>
     <span class="action">BUY ${s.code}${w.code}</span></div>`;
 }
-// Sorted bars column docked at the chart's right edge — values at visible right edge.
-function renderChartEdgeBars(){
-  const el=document.getElementById('chartEdgeBars'); if(!el) return;
-  const dz=chart.getOption().dataZoom[0], arr0=DATA[CURRENCIES[0].code];
-  if(!arr0||!arr0.length){ el.innerHTML=''; return; }
-  let edge=arr0[arr0.length-1][0]; if(dz.endValue!=null) edge=dz.endValue;
-  const sel=(chart.getOption().legend[0]||{}).selected||{};
-  const rows=CURRENCIES.filter(c=>sel[c.code]!==false)
-    .map(c=>({code:c.code,color:c.color,val:valueAt(DATA[c.code],edge)}))
-    .sort((a,b)=>b.val-a.val);
-  if(!rows.length){ el.innerHTML=''; return; }
-  el.innerHTML=rows.map(r=>{
-    const pct=Math.min(50, Math.abs(r.val)/7*50), pos=r.val>=0;
-    const bar=pos?`left:50%;width:${pct}%;background:${r.color}`:`right:50%;width:${pct}%;background:${r.color}`;
-    const vc=r.val>0?'#3fb27f':(r.val<0?'#e2576a':'#7d828f');
-    return `<div class="row">
-      <span class="code" style="color:${r.color}">${r.code}</span>
-      <span class="bar"><i style="${bar}"></i></span>
-      <span class="val" style="color:${vc}">${r.val>0?'+':''}${r.val}</span></div>`;
-  }).join('');
+// Dashed vertical line marking the latest data point on the chart (always visible).
+function updateLiveLine(){
+  const el=document.getElementById('liveLine'); if(!el) return;
+  const arr=DATA[CURRENCIES[0].code];
+  if(!arr || !arr.length){ el.style.display='none'; return; }
+  const latestTs=arr[arr.length-1][0];
+  const x=chart.convertToPixel({xAxisIndex:0}, latestTs);
+  const w=chart.getWidth();
+  if(x==null || isNaN(x) || x<0 || x>w){ el.style.display='none'; return; }
+  el.style.left = x + 'px';
+  el.style.display = 'block';
 }
 // Edge labels track the chart's visible right edge — chart-dependent (kept as updateRanking name for legacy callers)
-function updateRanking(){ updateEdgeLabels(); renderChartEdgeBars(); }
+function updateRanking(){ updateEdgeLabels(); updateLiveLine(); }
 // Collision-avoiding right-edge labels (push apart when values collide)
 function updateEdgeLabels(){
   const el=document.getElementById('edgeLabels'); if(!el)return;
@@ -440,6 +425,7 @@ function onZoom(){
 }
 chart.on('dataZoom',onZoom);
 chart.on('legendselectchanged',updateRanking);
+chart.on('finished', updateLiveLine);   // reposition live-line after chart fully renders
 window.addEventListener('resize',()=>{chart.resize();updateRanking();});
 // Poll latest snapshot — appends a new bar (or updates the current one) as MT5 pushes.
 // Fetch the 2 most recent snapshots — newest=live forming bar, second=last closed bar.
@@ -470,7 +456,7 @@ async function pollLatest(){
     const liveRows=renderRankingPanel(newest, 'live-ranking', 'live-ts');
     renderRankingPanel(closed, 'closed-ranking', 'closed-ts');
     renderSuggestedPair(liveRows);
-    updateEdgeLabels();
+    updateRanking();   // edge labels + live-line
   }catch(e){}
 }
 setInterval(pollLatest,15000);
