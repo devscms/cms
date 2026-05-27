@@ -1,0 +1,20 @@
+{
+  "name": "csm-backend",
+  "version": "1.0.0",
+  "description": "Currency Strength Meter — API + data store",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "seed": "node src/seed.js",
+    "clear": "node src/clear.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "mongoose": "^8.9.5"
+  },
+  "optionalDependencies": {
+    "mongodb-memory-server": "^10.1.4"
+  },
+  "license": "MIT"
+}

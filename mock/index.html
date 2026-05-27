@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Currency Strength Meter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161a22; --card:#12161e; --border:#222831; --border2:#2c333d;
+    --text:#d4d7de; --muted:#7d828f; --dim:#565b66;
+    --green:#3fb27f; --red:#e2576a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--text);background:var(--bg);overflow:hidden;
+    -webkit-font-smoothing:antialiased}
+  /* Header */
+  header{display:flex;align-items:center;gap:24px;padding:0 22px;height:56px;
+    background:var(--panel);border-bottom:1px solid var(--border)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px}
+  .brand .mark{width:24px;height:24px;border-radius:6px;background:#1f6feb;display:grid;place-items:center;
+    font-size:13px;color:#fff}
+  .brand small{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:1px}
+  .controls{display:flex;align-items:center;gap:14px;margin-left:auto}
+  .lbl{font-size:11px;color:var(--dim);font-weight:500}
+  .seg{display:flex;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .seg button{background:var(--panel);border:0;color:var(--muted);padding:6px 14px;cursor:pointer;
+    font:500 12px Inter;transition:.12s}
+  .seg button:hover{color:var(--text)}
+  .seg button.active{background:#1f6feb;color:#fff}
+  input[type=date]{background:var(--bg);color:var(--text);border:1px solid var(--border2);
+    padding:6px 9px;border-radius:9px;font:500 12px Inter;color-scheme:dark;cursor:pointer}
+  input[type=date]:hover{border-color:#3a424d}
+  .btn{background:var(--bg);color:var(--muted);border:1px solid var(--border2);padding:6px 12px;
+    border-radius:9px;cursor:pointer;font:500 12px Inter;transition:.12s}
+  .btn:hover{color:var(--text);border-color:#3a424d}
+  .live{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:500}
+  .live .dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+  /* Layout */
+  main{display:flex;height:calc(100% - 56px)}
+  .chart-wrap{flex:1;padding:12px}
+  .chart-card{position:relative;height:100%;background:var(--card);border:1px solid var(--border);
+    border-radius:14px;overflow:hidden}
+  #chart{width:100%;height:100%}
+  .zoom-ctl{position:absolute;bottom:56px;right:14px;display:flex;flex-direction:column;gap:6px;z-index:4}
+  .zoom-ctl button{width:30px;height:30px;border-radius:9px;background:rgba(22,26,34,.9);
+    border:1px solid var(--border2);color:var(--muted);font:600 16px Inter;cursor:pointer;
+    display:grid;place-items:center;transition:.12s}
+  .zoom-ctl button:hover{color:var(--text);border-color:#3a424d;background:var(--panel)}
+  .loading{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(14,17,23,.55);z-index:5;font:600 13px Inter;color:var(--muted)}
+  .loading.on{display:flex}
+  .loading .spin{width:18px;height:18px;border:2px solid var(--border2);border-top-color:#1f6feb;
+    border-radius:50%;animation:spin .7s linear infinite;margin-right:10px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .edge-labels{position:absolute;top:0;right:8px;height:100%;width:62px;pointer-events:none;z-index:2}
+  .edge-labels div{position:absolute;right:0;font:600 11px Inter;white-space:nowrap;
+    font-variant-numeric:tabular-nums;letter-spacing:.2px;transition:top .25s ease;
+    text-shadow:0 0 3px var(--bg),0 0 3px var(--bg),0 0 3px var(--bg)}
+  .sidebar{width:280px;padding:20px 18px;background:var(--panel);border-left:1px solid var(--border);overflow-y:auto}
+  .sidebar::-webkit-scrollbar{width:5px}.sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+  .s-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 14px}
+  .s-head h3{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--muted);font-weight:600}
+  .s-head span{font-size:11px;color:var(--dim)}
+  .rank-row{display:flex;align-items:center;gap:11px;padding:8px 4px}
+  .rank-row+.rank-row{border-top:1px solid var(--border)}
+  .rank-row .pos{font-size:11px;color:var(--dim);font-weight:600;width:12px}
+  .rank-row .swatch{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+  .rank-row .cur{font-weight:600;font-size:13px;width:34px}
+  .rank-row .bar{flex:1;height:4px;border-radius:2px;background:var(--border);position:relative;overflow:hidden}
+  .rank-row .bar i{position:absolute;top:0;bottom:0;border-radius:2px;transition:width .4s ease}
+  .rank-row .val{width:30px;text-align:right;font:600 13px Inter;font-variant-numeric:tabular-nums}
+  .pair-card{border-radius:12px;padding:14px;
+    background:linear-gradient(135deg,rgba(63,178,127,.10),rgba(91,140,255,.06));
+    border:1px solid rgba(63,178,127,.20)}
+  .pair-card .big{font-size:20px;font-weight:600;letter-spacing:-.3px}
+  .pair-card .sub{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+  .pair-card .action{display:inline-block;margin-top:11px;font:600 11px Inter;letter-spacing:.4px;
+    padding:4px 10px;border-radius:5px;background:rgba(63,178,127,.12);color:var(--green);border:1px solid rgba(63,178,127,.25)}
+  .hint{font-size:11px;color:var(--dim);margin-top:18px;line-height:1.8;border-top:1px solid var(--border);padding-top:14px}
+  .hint b{color:var(--muted);font-weight:500}
+  .note{font-size:10px;color:var(--dim);margin-top:10px;opacity:.75}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="mark">⌁</div>
+    <div>Currency Strength<small>8 majors</small></div>
+  </div>
+  <div class="controls">
+    <span class="lbl">Timeframe</span>
+    <div class="seg" id="seg">
+      <button data-tf="H1">H1</button>
+      <button data-tf="H4">H4</button>
+      <button data-tf="D1" class="active">D1</button>
+    </div>
+    <span class="lbl">Smooth</span>
+    <div class="seg" id="smoothSeg">
+      <button data-sm="1">Off</button>
+      <button data-sm="3">3</button>
+      <button data-sm="5" class="active">5</button>
+      <button data-sm="8">8</button>
+    </div>
+    <input type="date" id="from" title="From">
+    <input type="date" id="to" title="To">
+    <button class="btn" id="reset">Reset</button>
+    <button class="btn" id="regen">Refresh</button>
+    <span class="live"><span class="dot"></span>Live</span>
+  </div>
+</header>
+<main>
+  <div class="chart-wrap">
+    <div class="chart-card">
+      <div id="chart"></div>
+      <div class="edge-labels" id="edgeLabels"></div>
+      <div class="loading" id="loading"><span class="spin"></span>Loading…</div>
+      <div class="zoom-ctl">
+        <button id="zin" title="Zoom in">+</button>
+        <button id="zout" title="Zoom out">−</button>
+      </div>
+    </div>
+  </div>
+  <aside class="sidebar">
+    <div class="s-head"><h3>Strength Ranking</h3><span id="rank-ts"></span></div>
+    <div id="ranking"></div>
+    <div class="s-head" style="margin-top:24px"><h3>Suggested Pair</h3></div>
+    <div id="bestpair"></div>
+    <div class="hint">
+      <b>Legend</b> — click to toggle currency<br>
+      <b>Slider / wheel</b> — scroll timeline<br>
+      <b>Date range</b> — filter period
+    </div>
+    <div class="note">Connected to API · sample data until MT5 producer goes live.</div>
+  </aside>
+</main>
+<script>
+// Clean, professional palette (Tableau-style) mapped to your currencies
+const CURRENCIES=[
+  {code:"USD",color:"#3b9eff"},
+  {code:"EUR",color:"#ff5d6c"},
+  {code:"CHF",color:"#2dd4a7"},
+  {code:"CAD",color:"#ff9f43"},
+  {code:"NZD",color:"#c879ff"},
+  {code:"JPY",color:"#ffd93d"},
+  {code:"AUD",color:"#7ed957"},
+  {code:"GBP",color:"#aab4c5"},
+];
+const TF_CFG={H1:{stepMs:3600e3,points:2000,defWin:240},H4:{stepMs:4*3600e3,points:3000,defWin:180},D1:{stepMs:24*3600e3,points:730,defWin:120}};
+let currentTF="D1", DATA={};
+
+const API='/api';  // same origin (served by backend)
+// Initial load window + lazy older-chunk size (days), per timeframe.
+const INIT_DAYS  = {H1:14, H4:45,  D1:200};   // small initial load → fast TF switch
+const CHUNK_DAYS = {H1:30, H4:90,  D1:365};   // larger chunks for lazy history
+let loadedFrom=null, noMoreOld=false, loadingOlder=false, loading=false;
+let smoothPeriod=5, SDATA={};   // display smoothing (trailing SMA over raw strength)
+function showLoading(on){ loading=on; const el=document.getElementById('loading'); if(el) el.classList.toggle('on',on); }
+
+async function fetchRange(tf, fromMs, toMs){
+  let url=`${API}/strength?tf=${tf}`;
+  if(fromMs!=null) url+=`&from=${Math.floor(fromMs)}`;
+  if(toMs!=null)   url+=`&to=${Math.floor(toMs)}`;
+  const res=await fetch(url);
+  if(!res.ok) throw new Error('API '+res.status);
+  return (await res.json()).data;
+}
+function rowsToSeries(rows){
+  const out={}; CURRENCIES.forEach(c=>out[c.code]=[]);
+  for(const row of rows){ const ms=new Date(row.ts).getTime();
+    CURRENCIES.forEach(c=>out[c.code].push([ms,row[c.code]])); }
+  return out;
+}
+// Trailing simple moving average — smooths the bar-to-bar whipsaw for display.
+function smaSeries(arr,n){
+  if(n<=1) return arr.map(p=>[p[0],p[1]]);
+  const out=[]; let sum=0; const q=[];
+  for(let i=0;i<arr.length;i++){ q.push(arr[i][1]); sum+=arr[i][1];
+    if(q.length>n) sum-=q.shift(); out.push([arr[i][0], sum/q.length]); }
+  return out;
+}
+function rebuildSmoothed(){ CURRENCIES.forEach(c=>{ SDATA[c.code]=smaSeries(DATA[c.code]||[], smoothPeriod); }); }
+// Fetch the next older chunk and prepend it, keeping the visible window fixed.
+async function loadOlder(){
+  if(loadingOlder||noMoreOld||loadedFrom==null) return;
+  loadingOlder=true;
+  try{
+    const toMs=loadedFrom-1, fromMs=toMs-CHUNK_DAYS[currentTF]*864e5;
+    const rows=await fetchRange(currentTF, fromMs, toMs);
+    if(!rows.length){ noMoreOld=true; return; }
+    const older=rowsToSeries(rows);
+    CURRENCIES.forEach(c=>{ DATA[c.code]=older[c.code].concat(DATA[c.code]); });
+    loadedFrom=new Date(rows[0].ts).getTime();
+    rebuildSmoothed();
+    const dz=chart.getOption().dataZoom[0], sv=dz.startValue, ev=dz.endValue;
+    chart.setOption({series:CURRENCIES.map(c=>({name:c.code,data:SDATA[c.code]}))});
+    if(sv!=null&&ev!=null) chart.dispatchAction({type:'dataZoom',startValue:sv,endValue:ev});
+    updateRanking();
+  }catch(e){ console.error('[csm] loadOlder:',e); }
+  finally{ loadingOlder=false; }
+}
+
+const chart=echarts.init(document.getElementById('chart'),'dark',{renderer:'canvas'});
+
+function buildOption(){
+  const series=CURRENCIES.map((c,idx)=>({
+    name:c.code,type:'line',data:SDATA[c.code],
+    showSymbol:false,smooth:0.3,sampling:'lttb',
+    lineStyle:{width:1.1,color:c.color},
+    itemStyle:{color:c.color},
+    emphasis:{focus:'series',lineStyle:{width:2}},
+    blur:{lineStyle:{opacity:0.15}},
+    ...(idx===0?{markLine:{silent:true,symbol:'none',
+      lineStyle:{color:'rgba(255,255,255,.12)',width:1},label:{show:false},data:[{yAxis:0}]}}:{}),
+  }));
+  return {
+    backgroundColor:'transparent',
+    animationDuration:600,animationEasing:'cubicOut',
+    grid:{left:8,right:78,top:46,bottom:78,containLabel:true},
+    legend:{data:CURRENCIES.map(c=>c.code),top:12,left:'center',
+      icon:'roundRect',itemWidth:14,itemHeight:7,itemGap:20,
+      textStyle:{color:'#9ca1ad',fontSize:12,fontWeight:500,fontFamily:'Inter'},
+      inactiveColor:'#3a3f4a'},
+    tooltip:{trigger:'axis',
+      backgroundColor:'#161a22',borderColor:'#2c333d',borderWidth:1,padding:[9,12],
+      textStyle:{color:'#d4d7de',fontSize:12,fontFamily:'Inter'},
+      extraCssText:'border-radius:8px',
+      axisPointer:{type:'line',lineStyle:{color:'rgba(255,255,255,.15)',width:1}},
+      formatter:items=>{
+        if(!items.length)return'';
+        const d=new Date(items[0].value[0]);
+        let s=`<div style="font-size:11px;color:#7d828f;margin-bottom:6px">${d.toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>`;
+        const wr=items.map(it=>({it,raw:valueAt(DATA[it.seriesName],it.value[0])}));
+        wr.sort((a,b)=>b.raw-a.raw);
+        wr.forEach(({it,raw})=>{const col=raw>0?'#3fb27f':(raw<0?'#e2576a':'#7d828f');
+          s+=`<div style="display:flex;align-items:center;gap:8px;padding:1px 0">
+            <span style="width:8px;height:8px;border-radius:2px;background:${it.color}"></span>
+            <span style="width:32px">${it.seriesName}</span>
+            <span style="margin-left:auto;font-weight:600;color:${col};font-variant-numeric:tabular-nums">${raw>0?'+':''}${raw}</span></div>`;});
+        return s;
+      }},
+    xAxis:{type:'time',axisLine:{show:false},axisTick:{show:false},
+      axisLabel:{color:'#6a6f7a',fontSize:11,fontFamily:'Inter',hideOverlap:true},
+      splitLine:{show:true,lineStyle:{color:'rgba(255,255,255,.03)'}}},
+    yAxis:{type:'value',min:-8,max:8,interval:2,
+      axisLine:{show:false},axisTick:{show:false},
+      axisLabel:{color:'#6a6f7a',fontSize:11,fontFamily:'Inter',formatter:v=>v>0?`+${v}`:`${v}`},
+      splitLine:{lineStyle:{color:'rgba(255,255,255,.04)'}}},
+    dataZoom:[{type:'inside',filterMode:'none',zoomOnMouseWheel:true,moveOnMouseMove:true,
+        minValueSpan:TF_CFG[currentTF].stepMs*4},
+      {type:'slider',height:26,bottom:18,filterMode:'none',minValueSpan:TF_CFG[currentTF].stepMs*4,
+       backgroundColor:'transparent',borderColor:'#222831',
+       fillerColor:'rgba(31,111,235,.10)',
+       handleStyle:{color:'#1f6feb',borderColor:'#1f6feb'},
+       moveHandleStyle:{color:'rgba(31,111,235,.4)'},
+       dataBackground:{lineStyle:{color:'rgba(255,255,255,.10)'},areaStyle:{color:'rgba(255,255,255,.02)'}},
+       selectedDataBackground:{lineStyle:{color:'rgba(31,111,235,.4)'},areaStyle:{color:'rgba(31,111,235,.06)'}},
+       textStyle:{color:'#6a6f7a',fontFamily:'Inter'}}],
+    series,
+  };
+}
+const DEF_BARS=15;   // default visible bars (any TF) — keeps line density readable
+function setDefaultWindow(){
+  const arr=DATA[CURRENCIES[0].code];
+  if(!arr||!arr.length) return;
+  const endTs=arr[arr.length-1][0];
+  const startTs=arr[Math.max(0, arr.length-DEF_BARS)][0];
+  chart.dispatchAction({type:'dataZoom',startValue:startTs,endValue:endTs});
+  document.getElementById('from').value=new Date(startTs).toISOString().slice(0,10);
+  document.getElementById('to').value=new Date(endTs).toISOString().slice(0,10);
+}
+function valueAt(arr,ts){let b=arr[0];for(const p of arr){if(p[0]<=ts)b=p;else break;}return b[1];}
+function updateRanking(){
+  const dz=chart.getOption().dataZoom[0],arr0=DATA[CURRENCIES[0].code];
+  let edge=arr0[arr0.length-1][0];if(dz.endValue!=null)edge=dz.endValue;
+  const rows=CURRENCIES.map(c=>({code:c.code,color:c.color,val:valueAt(DATA[c.code],edge)}));
+  rows.sort((a,b)=>b.val-a.val);
+  document.getElementById('ranking').innerHTML=rows.map((r,i)=>{
+    const pct=Math.abs(r.val)/7*50,pos=r.val>=0;
+    const bar=pos?`left:50%;width:${pct}%;background:${r.color}`:`right:50%;width:${pct}%;background:${r.color}`;
+    const vc=r.val>0?'#3fb27f':(r.val<0?'#e2576a':'#7d828f');
+    return `<div class="rank-row"><span class="pos">${i+1}</span>
+      <span class="swatch" style="background:${r.color}"></span>
+      <span class="cur">${r.code}</span>
+      <span class="bar"><i style="${bar}"></i></span>
+      <span class="val" style="color:${vc}">${r.val>0?'+':''}${r.val}</span></div>`;
+  }).join('');
+  document.getElementById('rank-ts').textContent=new Date(edge).toLocaleDateString([], {month:'short',day:'numeric'});
+  const s=rows[0],w=rows[rows.length-1];
+  document.getElementById('bestpair').innerHTML=`<div class="pair-card">
+    <div class="big">${s.code}/${w.code}</div>
+    <div class="sub">Strongest ${s.val>0?'+':''}${s.val} · Weakest ${w.val} · spread ${s.val-w.val}</div>
+    <span class="action">BUY ${s.code}${w.code}</span></div>`;
+  updateEdgeLabels();
+}
+// Collision-avoiding right-edge labels (push apart when values collide)
+function updateEdgeLabels(){
+  const el=document.getElementById('edgeLabels'); if(!el)return;
+  const dz=chart.getOption().dataZoom[0],arr0=DATA[CURRENCIES[0].code];
+  let edge=arr0[arr0.length-1][0]; if(dz.endValue!=null)edge=dz.endValue;
+  const sel=(chart.getOption().legend[0]||{}).selected||{};
+  let items=CURRENCIES.filter(c=>sel[c.code]!==false).map(c=>{
+    const vRaw=valueAt(DATA[c.code],edge);       // actual value (text)
+    const vSm =valueAt(SDATA[c.code],edge);      // smoothed (label position = line end)
+    const y=chart.convertToPixel({yAxisIndex:0},vSm);
+    return {code:c.code,color:c.color,val:vRaw,y};
+  }).filter(it=>it.y!=null);
+  if(!items.length){el.innerHTML='';return;}
+  items.sort((a,b)=>a.y-b.y);
+  const gap=15, minY=10, maxY=chart.getHeight()-58;
+  for(let i=0;i<items.length;i++){
+    const lo=(i===0)?minY:items[i-1].y+gap;
+    if(items[i].y<lo)items[i].y=lo;
+  }
+  for(let i=items.length-1;i>=0;i--){
+    if(items[i].y>maxY)items[i].y=maxY;
+    if(i<items.length-1 && items[i+1].y-items[i].y<gap)items[i].y=items[i+1].y-gap;
+  }
+  el.innerHTML=items.map(it=>
+    `<div style="top:${(it.y-7)}px;color:${it.color}">${it.code} ${it.val>0?'+':''}${it.val}</div>`
+  ).join('');
+}
+async function reload(){
+  showLoading(true);
+  noMoreOld=false; loadingOlder=false;
+  const now=Date.now(), fromMs=now-INIT_DAYS[currentTF]*864e5;
+  let rows;
+  try{ rows=await fetchRange(currentTF, fromMs, null); }
+  catch(e){ console.error('[csm] load failed:',e); showLoading(false); return; }
+  DATA=rowsToSeries(rows);
+  loadedFrom = rows.length ? new Date(rows[0].ts).getTime() : fromMs;
+  rebuildSmoothed();
+  chart.setOption(buildOption(),true);setDefaultWindow();updateRanking();
+  showLoading(false);
+}
+document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#seg button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');currentTF=b.dataset.tf;reload();});
+document.querySelectorAll('#smoothSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#smoothSeg button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); smoothPeriod=+b.dataset.sm; rebuildSmoothed();
+  chart.setOption({series:CURRENCIES.map(c=>({name:c.code,data:SDATA[c.code]}))});
+  updateRanking();});
+document.getElementById('reset').onclick=()=>setDefaultWindow();
+document.getElementById('regen').onclick=()=>reload();
+function zoomBy(factor){
+  const dz=chart.getOption().dataZoom[0],arr=DATA[CURRENCIES[0].code];
+  let start=dz.startValue!=null?dz.startValue:arr[0][0];
+  let end=dz.endValue!=null?dz.endValue:arr[arr.length-1][0];
+  const center=(start+end)/2; let half=(end-start)/2*factor;
+  const minHalf=TF_CFG[currentTF].stepMs*2.5; if(half<minHalf)half=minHalf;
+  const lo=arr[0][0],hi=arr[arr.length-1][0];
+  let ns=center-half,ne=center+half;
+  if(ns<lo)ns=lo; if(ne>hi)ne=hi;
+  chart.dispatchAction({type:'dataZoom',startValue:ns,endValue:ne});updateRanking();
+}
+document.getElementById('zin').onclick=()=>zoomBy(0.6);
+document.getElementById('zout').onclick=()=>zoomBy(1.65);
+async function applyDate(){
+  const f=document.getElementById('from').value,t=document.getElementById('to').value; if(!f||!t)return;
+  const fromMs=new Date(f).getTime();
+  showLoading(true);
+  let guard=0;
+  while(loadedFrom!=null && fromMs<loadedFrom && !noMoreOld && guard++<50){ await loadOlder(); }
+  chart.dispatchAction({type:'dataZoom',startValue:fromMs,endValue:new Date(t+'T23:59:59').getTime()});
+  updateRanking();
+  showLoading(false);
+}
+document.getElementById('from').onchange=applyDate;document.getElementById('to').onchange=applyDate;
+// On scroll/zoom: refresh ranking, and lazy-load older data when nearing the left edge.
+function onZoom(){
+  updateRanking();
+  const dz=chart.getOption().dataZoom[0];
+  if(dz.startValue!=null && loadedFrom!=null){
+    const buf=CHUNK_DAYS[currentTF]*864e5*0.3;
+    if(dz.startValue<=loadedFrom+buf) loadOlder();
+  }
+}
+chart.on('dataZoom',onZoom);
+chart.on('legendselectchanged',updateRanking);
+window.addEventListener('resize',()=>{chart.resize();updateRanking();});
+// Poll latest snapshot — appends a new bar (or updates the current one) as MT5 pushes.
+async function pollLatest(){
+  if(loading||loadingOlder) return;   // don't race a TF switch / history fetch
+  try{
+    const r=await fetch(`${API}/strength/latest?tf=${currentTF}`);
+    if(!r.ok)return; const d=await r.json(); if(!d)return;
+    const ms=new Date(d.ts).getTime();
+    const a0=DATA[CURRENCIES[0].code]; if(!a0||!a0.length)return;
+    const lastMs=a0[a0.length-1][0];
+    if(ms>lastMs) CURRENCIES.forEach(c=>DATA[c.code].push([ms,d[c.code]]));
+    else if(ms===lastMs) CURRENCIES.forEach(c=>DATA[c.code][DATA[c.code].length-1]=[ms,d[c.code]]);
+    else return;
+    rebuildSmoothed();
+    chart.setOption({series:CURRENCIES.map(c=>({name:c.code,data:SDATA[c.code]}))});
+    updateRanking();
+  }catch(e){}
+}
+setInterval(pollLatest,15000);
+reload();
+</script>
+</body>
+</html>
