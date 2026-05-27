@@ -127,9 +127,9 @@
   </div>
   <aside class="sidebar">
     <div class="s-head"><h3>Live</h3><span id="live-ts"></span></div>
-    <div id="live-ranking"></div>
+    <div id="live-ranking"><div style="color:var(--dim);font-size:11px;padding:6px 4px">Loading…</div></div>
     <div class="s-head" style="margin-top:18px"><h3>Last Closed</h3><span id="closed-ts"></span></div>
-    <div id="closed-ranking"></div>
+    <div id="closed-ranking"><div style="color:var(--dim);font-size:11px;padding:6px 4px">Loading…</div></div>
     <div class="s-head" style="margin-top:18px"><h3>Suggested Pair</h3></div>
     <div id="bestpair"></div>
     <div class="hint">
@@ -339,15 +339,27 @@ function updateEdgeLabels(){
 async function reload(){
   showLoading(true);
   noMoreOld=false; loadingOlder=false;
-  const now=Date.now(), fromMs=now-INIT_DAYS[currentTF]*864e5;
+  const tf=currentTF;
+  const now=Date.now(), fromMs=now-INIT_DAYS[tf]*864e5;
+  // Fire both fetches in parallel — panels (small payload) often arrive first.
+  const panelsP = fetch(`${API}/strength/latest?tf=${tf}&n=2`)
+    .then(r => r.ok ? r.json() : null)
+    .then(j => {
+      if(tf!==currentTF) return;   // user switched TF mid-flight; ignore stale
+      const docs=(j && j.data) || [];
+      const liveRows=renderRankingPanel(docs[0],'live-ranking','live-ts');
+      renderRankingPanel(docs[1],'closed-ranking','closed-ts');
+      renderSuggestedPair(liveRows);
+    }).catch(()=>{});
   let rows;
-  try{ rows=await fetchRange(currentTF, fromMs, null); }
+  try{ rows=await fetchRange(tf, fromMs, null); }
   catch(e){ console.error('[csm] load failed:',e); showLoading(false); return; }
+  if(tf!==currentTF){ showLoading(false); return; }  // TF switched mid-flight
   DATA=rowsToSeries(rows);
   loadedFrom = rows.length ? new Date(rows[0].ts).getTime() : fromMs;
   rebuildSmoothed();
   chart.setOption(buildOption(),true);setDefaultWindow();updateRanking();
-  await pollLatest();   // populate Live + Last Closed panels immediately
+  await panelsP;
   showLoading(false);
 }
 document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
