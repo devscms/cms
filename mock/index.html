@@ -89,6 +89,31 @@
   .hint{font-size:11px;color:var(--dim);margin-top:18px;line-height:1.8;border-top:1px solid var(--border);padding-top:14px}
   .hint b{color:var(--muted);font-weight:500}
   .note{font-size:10px;color:var(--dim);margin-top:10px;opacity:.75}
+  /* News event pulses + detail card */
+  .ev-pop{position:absolute;top:54px;left:50%;transform:translateX(-50%);width:308px;z-index:7;
+    background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:13px 14px;
+    box-shadow:0 10px 34px rgba(0,0,0,.5);display:none}
+  .ev-pop.on{display:block}
+  .ev-pop .ev-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .ev-pop .ev-cur{font-weight:700;font-size:15px}
+  .ev-pop .ev-bias{font:700 10px Inter;letter-spacing:.6px;text-transform:uppercase;padding:3px 8px;border-radius:5px}
+  .ev-pop .ev-bias.bullish{background:rgba(63,178,127,.14);color:var(--green)}
+  .ev-pop .ev-bias.bearish{background:rgba(226,87,106,.14);color:var(--red)}
+  .ev-pop .ev-bias.neutral{background:rgba(125,130,143,.16);color:var(--muted)}
+  .ev-pop .ev-time{font-size:11px;color:var(--dim);margin-left:auto}
+  .ev-pop .ev-close{background:none;border:0;color:var(--dim);font-size:18px;cursor:pointer;line-height:1;padding:0 2px}
+  .ev-pop .ev-close:hover{color:var(--text)}
+  .ev-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--border)}
+  .ev-row .er-name{font-size:12px;color:var(--text);flex:1}
+  .ev-row .er-name small{display:block;color:var(--dim);font-size:10px;margin-top:2px}
+  .ev-row .er-imp{font:600 9px Inter;letter-spacing:.3px;padding:2px 6px;border-radius:4px;
+    background:var(--card);color:var(--muted);border:1px solid var(--border)}
+  .ev-row .er-c{font:600 12px Inter;width:42px;text-align:right;font-variant-numeric:tabular-nums}
+  .ev-net{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;
+    border-top:1px solid var(--border2);font-size:12px;color:var(--muted)}
+  .ev-net b{font-size:15px;font-variant-numeric:tabular-nums}
+  .pulse-note{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--dim)}
+  .pulse-note i{width:8px;height:8px;border-radius:50%;display:inline-block}
 </style>
 </head>
 <body>
@@ -111,6 +136,12 @@
       <button data-sm="5" class="active">5</button>
       <button data-sm="8">8</button>
     </div>
+    <span class="lbl">News</span>
+    <div class="seg" id="impactSeg">
+      <button data-imp="High">High</button>
+      <button data-imp="High,Medium" class="active">High+Med</button>
+      <button data-imp="High,Medium,Low,None">All</button>
+    </div>
     <input type="date" id="from" title="From">
     <input type="date" id="to" title="To">
     <button class="btn" id="reset">Reset</button>
@@ -125,6 +156,7 @@
       <div class="edge-labels" id="edgeLabels"></div>
       <div class="live-line" id="liveLine" style="display:none"></div>
       <div class="loading" id="loading"><span class="spin"></span>Loading…</div>
+      <div class="ev-pop" id="evPop"></div>
       <div class="zoom-ctl">
         <button id="zin" title="Zoom in">+</button>
         <button id="zout" title="Zoom out">−</button>
@@ -140,8 +172,14 @@
     <div id="bestpair"></div>
     <div class="hint">
       <b>Legend</b> — click to toggle currency<br>
+      <b>News pulse</b> — click a dot for details<br>
       <b>Slider / wheel</b> — scroll timeline<br>
       <b>Date range</b> — filter period
+      <div style="margin-top:9px;display:flex;gap:12px">
+        <span class="pulse-note"><i style="background:#3fb27f"></i>bullish</span>
+        <span class="pulse-note"><i style="background:#e2576a"></i>bearish</span>
+        <span class="pulse-note"><i style="background:#7d828f"></i>neutral</span>
+      </div>
     </div>
     <div class="note">Connected to API · sample data until MT5 producer goes live.</div>
   </aside>
@@ -167,6 +205,7 @@ const INIT_DAYS  = {H1:14, H4:45,  D1:200};   // small initial load → fast TF 
 const CHUNK_DAYS = {H1:30, H4:90,  D1:365};   // larger chunks for lazy history
 let loadedFrom=null, noMoreOld=false, loadingOlder=false, loading=false;
 let smoothPeriod=5, SDATA={};   // display smoothing (trailing SMA over raw strength)
+let EVENTS=[], impactFilter='High,Medium';   // news-event clusters + active impact filter
 function showLoading(on){ loading=on; const el=document.getElementById('loading'); if(el) el.classList.toggle('on',on); }
 
 async function fetchRange(tf, fromMs, toMs){
@@ -204,8 +243,9 @@ async function loadOlder(){
     CURRENCIES.forEach(c=>{ DATA[c.code]=older[c.code].concat(DATA[c.code]); });
     loadedFrom=new Date(rows[0].ts).getTime();
     rebuildSmoothed();
+    const olderEv=await fetchEvents(loadedFrom, toMs); EVENTS=mergeEvents(olderEv, EVENTS);
     const dz=chart.getOption().dataZoom[0], sv=dz.startValue, ev=dz.endValue;
-    chart.setOption({series:CURRENCIES.map(c=>({name:c.code,data:SDATA[c.code]}))});
+    chart.setOption({series:currencySeries().concat([eventSeries()])});
     if(sv!=null&&ev!=null) chart.dispatchAction({type:'dataZoom',startValue:sv,endValue:ev});
     updateRanking();
   }catch(e){ console.error('[csm] loadOlder:',e); }
@@ -214,8 +254,8 @@ async function loadOlder(){
 
 const chart=echarts.init(document.getElementById('chart'),'dark',{renderer:'canvas'});
 
-function buildOption(){
-  const series=CURRENCIES.map((c,idx)=>({
+function currencySeries(){
+  return CURRENCIES.map((c,idx)=>({
     name:c.code,type:'line',data:SDATA[c.code],
     showSymbol:false,smooth:0.3,sampling:'lttb',
     lineStyle:{width:1.1,color:c.color},
@@ -225,6 +265,9 @@ function buildOption(){
     ...(idx===0?{markLine:{silent:true,symbol:'none',
       lineStyle:{color:'rgba(255,255,255,.12)',width:1},label:{show:false},data:[{yAxis:0}]}}:{}),
   }));
+}
+function buildOption(){
+  const series=currencySeries().concat([eventSeries()]);
   return {
     backgroundColor:'transparent',
     animationDuration:600,animationEasing:'cubicOut',
@@ -242,7 +285,7 @@ function buildOption(){
         if(!items.length)return'';
         const d=new Date(items[0].value[0]);
         let s=`<div style="font-size:11px;color:#7d828f;margin-bottom:6px">${d.toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>`;
-        const wr=items.map(it=>({it,raw:valueAt(DATA[it.seriesName],it.value[0])}));
+        const wr=items.filter(it=>DATA[it.seriesName]).map(it=>({it,raw:valueAt(DATA[it.seriesName],it.value[0])}));
         wr.sort((a,b)=>b.raw-a.raw);
         wr.forEach(({it,raw})=>{const col=raw>0?'#3fb27f':(raw<0?'#e2576a':'#7d828f');
           s+=`<div style="display:flex;align-items:center;gap:8px;padding:1px 0">
@@ -282,6 +325,73 @@ function setDefaultWindow(){
   document.getElementById('to').value=new Date(endTs).toISOString().slice(0,10);
 }
 function valueAt(arr,ts){let b=arr[0];for(const p of arr){if(p[0]<=ts)b=p;else break;}return b[1];}
+
+// ---- News events -------------------------------------------------------------
+// Fetch grouped clusters (one per currency+time, net bias precomputed by backend).
+async function fetchEvents(fromMs,toMs){
+  const cur=CURRENCIES.map(c=>c.code).join(',');
+  let url=`${API}/events?grouped=true&cur=${cur}&impact=${encodeURIComponent(impactFilter)}`;
+  if(fromMs!=null) url+=`&from=${Math.floor(fromMs)}`;
+  if(toMs!=null)   url+=`&to=${Math.floor(toMs)}`;
+  try{ const r=await fetch(url); if(!r.ok) return []; return (await r.json()).data || []; }
+  catch(e){ return []; }
+}
+function mergeEvents(a,b){
+  const seen=new Set(), out=[];
+  for(const cl of a.concat(b)){ const k=cl.currency+'|'+new Date(cl.ts).getTime();
+    if(seen.has(k))continue; seen.add(k); out.push(cl); }
+  out.sort((x,y)=>new Date(x.ts)-new Date(y.ts)); return out;
+}
+// Pulsing markers — sit ON the relevant currency's (smoothed) line at the event time.
+function eventSeries(){
+  const biasColor={bullish:'#3fb27f',bearish:'#e2576a',neutral:'#7d828f'};
+  const data=(EVENTS||[]).map(cl=>{
+    const ms=new Date(cl.ts).getTime();
+    const line=SDATA[cl.currency];
+    if(!line||!line.length) return null;
+    const y=valueAt(line,ms);
+    if(y==null) return null;
+    return {value:[ms,y],cluster:cl,
+      symbolSize: cl.topImpact==='High'?12:(cl.topImpact==='Medium'?9:6),
+      itemStyle:{color:biasColor[cl.bias]||'#7d828f',borderColor:'rgba(255,255,255,.85)',borderWidth:1}};
+  }).filter(Boolean);
+  return {
+    name:'__events__',type:'effectScatter',coordinateSystem:'cartesian2d',z:7,
+    rippleEffect:{scale:2.8,brushType:'stroke',period:3.5},showEffectOn:'render',
+    symbol:'circle',data,emphasis:{scale:1.5},
+  };
+}
+// Reload events for the current window + repaint the pulse layer (leaves lines untouched).
+async function refreshEvents(){
+  const fromMs = loadedFrom!=null ? loadedFrom : Date.now()-INIT_DAYS[currentTF]*864e5;
+  EVENTS = await fetchEvents(fromMs, Date.now());
+  chart.setOption({series:currencySeries().concat([eventSeries()])});
+}
+function fmtNum(v,unit){ if(v==null)return '—'; return (Math.round(v*100)/100)+(unit||''); }
+function showEventCard(cl){
+  const pop=document.getElementById('evPop'); if(!pop)return;
+  const biasLabel={bullish:'Bullish',bearish:'Bearish',neutral:'Neutral'}[cl.bias]||'Neutral';
+  const netCol = cl.bias==='bullish'?'var(--green)':(cl.bias==='bearish'?'var(--red)':'var(--muted)');
+  const t=new Date(cl.ts).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const rows=cl.events.map(e=>{
+    const tag = e.actual==null?'pending':(e.actual>e.forecast?'beat':(e.actual<e.forecast?'miss':'met'));
+    const c=e.contribution, cc=c>0?'var(--green)':(c<0?'var(--red)':'var(--muted)');
+    return `<div class="ev-row">
+      <div class="er-name">${e.title}
+        <small>${fmtNum(e.actual,e.unit)} vs ${fmtNum(e.forecast,e.unit)} · ${tag}</small></div>
+      <span class="er-imp">${e.impact}</span>
+      <span class="er-c" style="color:${cc}">${c>0?'+':''}${c}</span></div>`;
+  }).join('');
+  pop.innerHTML=`<div class="ev-head">
+      <span class="ev-cur">${cl.currency}</span>
+      <span class="ev-bias ${cl.bias}">${biasLabel}</span>
+      <span class="ev-time">${t}</span>
+      <button class="ev-close" onclick="hideEventCard()">×</button>
+    </div>${rows}
+    <div class="ev-net"><span>Net score</span><b style="color:${netCol}">${cl.netScore>0?'+':''}${cl.netScore}</b></div>`;
+  pop.classList.add('on');
+}
+function hideEventCard(){ const pop=document.getElementById('evPop'); if(pop)pop.classList.remove('on'); }
 // Render one snapshot's ranking rows into a panel. Returns sorted rows.
 function renderRankingPanel(snapshot, panelId, tsId){
   const panel=document.getElementById(panelId), ts=document.getElementById(tsId);
@@ -386,6 +496,7 @@ async function reload(){
   DATA=rowsToSeries(rows);
   loadedFrom = rows.length ? new Date(rows[0].ts).getTime() : fromMs;
   rebuildSmoothed();
+  EVENTS = await fetchEvents(loadedFrom, Date.now());
   chart.setOption(buildOption(),true);setDefaultWindow();updateRanking();
   await panelsP;
   showLoading(false);
@@ -396,7 +507,7 @@ document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
 document.querySelectorAll('#smoothSeg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#smoothSeg button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); smoothPeriod=+b.dataset.sm; rebuildSmoothed();
-  chart.setOption({series:CURRENCIES.map(c=>({name:c.code,data:SDATA[c.code]}))});
+  chart.setOption({series:currencySeries().concat([eventSeries()])});
   updateRanking();});
 document.getElementById('reset').onclick=()=>setDefaultWindow();
 document.getElementById('regen').onclick=()=>reload();
@@ -436,6 +547,12 @@ function onZoom(){
 chart.on('dataZoom',onZoom);
 chart.on('legendselectchanged',updateRanking);
 chart.on('finished', updateLiveLine);   // reposition live-line after chart fully renders
+// News pulses: click a dot → breakdown card; collapse it when the user pans/zooms.
+chart.on('click', p=>{ if(p && p.seriesName==='__events__' && p.data && p.data.cluster) showEventCard(p.data.cluster); });
+chart.on('dataZoom', hideEventCard);
+document.querySelectorAll('#impactSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#impactSeg button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); impactFilter=b.dataset.imp; hideEventCard(); refreshEvents();});
 window.addEventListener('resize',()=>{chart.resize();updateRanking();});
 // Poll latest snapshot — appends a new bar (or updates the current one) as MT5 pushes.
 // Fetch the 2 most recent snapshots — newest=live forming bar, second=last closed bar.
