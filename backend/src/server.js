@@ -11,7 +11,6 @@ const { Strength } = require('./models/Strength');
 const { seedDatabase } = require('./seedData');
 const strengthRoutes = require('./routes/strength');
 const ingestRoutes = require('./routes/ingest');
-const eventRoutes = require('./routes/events');
 
 const app = express();
 app.use(cors());
@@ -20,7 +19,6 @@ app.use(express.json({ limit: '10mb' }));
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 app.use('/api', strengthRoutes);
 app.use('/api', ingestRoutes);
-app.use('/api', eventRoutes);
 
 // Serve the frontend — try several layouts so the app works whether deployed as
 // CurrencyStrengthApp/backend (../../mock) or with backend contents at the app root (../mock).
