@@ -106,19 +106,21 @@
     /* vertical swipe scrolls the PAGE; horizontal drag still pans the chart */
     #chart,#chart canvas{touch-action:pan-y !important}
   }
-  /* ---- Responsive: phone ---- */
+  /* ---- Responsive: phone — DECLUTTERED: chart + rankings only ---- */
   @media (max-width:560px){
     .lbl{display:none}
     .live{display:none}
-    .seg button{padding:8px 11px;font-size:11px}
-    .btn{padding:8px 11px;font-size:11px}
-    input[type=date]{padding:7px;font-size:11px;max-width:120px}
+    .controls{gap:6px}
+    #smoothSeg,#regen{display:none}   /* smooth stays at default; 15s auto-refresh covers Refresh */
+    .hint,.note{display:none}          /* desktop-interaction help text = noise on phone */
+    .edge-labels{display:none}         /* 8 floating labels overlapped the lines; rankings below show values */
+    .seg button{padding:8px 12px;font-size:11px}
+    .btn{padding:8px 12px;font-size:11px}
+    input[type=date]{padding:7px 5px;font-size:11px;max-width:108px}
     .chart-wrap{height:58vh;height:58svh;min-height:300px}
-    .live-line{top:40px;bottom:64px}
-    .zoom-ctl{bottom:44px;right:10px}
+    .live-line{top:40px;bottom:30px}
+    .zoom-ctl{bottom:36px;right:10px}
     .zoom-ctl button{width:36px;height:36px}
-    .edge-labels{width:54px}
-    .edge-labels div{font-size:10px}
   }
 </style>
 </head>
@@ -248,14 +250,14 @@ const chart=echarts.init(document.getElementById('chart'),'dark',{renderer:'canv
 // Narrow screens: tighter grid, single-row scrollable legend, compact slider.
 function isNarrow(){ return window.innerWidth<=560; }
 function respGrid(){ const n=isNarrow();
-  return {left:8,right:n?56:78,top:n?40:46,bottom:n?60:78,containLabel:true}; }
+  return {left:8,right:n?14:78,top:n?40:46,bottom:n?30:78,containLabel:true}; }
 function respLegend(){ const n=isNarrow();
   return n?{type:'scroll',top:8,itemGap:12,pageIconColor:'#9ca1ad',
             pageIconInactiveColor:'#3a3f4a',pageIconSize:11,
             pageTextStyle:{color:'#6a6f7a',fontSize:10,fontFamily:'Inter'}}
           :{type:'plain',top:12,itemGap:20}; }
-function respSlider(){ const n=isNarrow();
-  return n?{height:20,bottom:8}:{height:26,bottom:18}; }
+function respSlider(){ const n=isNarrow();   // phone: hide the mini-map slider (visual noise); pan via drag, zoom via +/- buttons
+  return n?{show:false}:{show:true,height:26,bottom:18}; }
 function buildOption(){
   const narrow=isNarrow();
   const series=CURRENCIES.map((c,idx)=>({
@@ -273,8 +275,8 @@ function buildOption(){
     animationDuration:600,animationEasing:'cubicOut',
     grid:respGrid(),
     legend:Object.assign({data:CURRENCIES.map(c=>c.code),left:'center',
-      icon:'roundRect',itemWidth:14,itemHeight:7,
-      textStyle:{color:'#9ca1ad',fontSize:12,fontWeight:500,fontFamily:'Inter'},
+      icon:'roundRect',itemWidth:narrow?12:14,itemHeight:7,
+      textStyle:{color:'#9ca1ad',fontSize:narrow?11:12,fontWeight:500,fontFamily:'Inter'},
       inactiveColor:'#3a3f4a'},respLegend()),
     tooltip:{trigger:'axis',confine:true,
       backgroundColor:'#161a22',borderColor:'#2c333d',borderWidth:1,padding:[9,12],
@@ -297,9 +299,9 @@ function buildOption(){
     xAxis:{type:'time',axisLine:{show:false},axisTick:{show:false},
       axisLabel:{color:'#6a6f7a',fontSize:11,fontFamily:'Inter',hideOverlap:true},
       splitLine:{show:true,lineStyle:{color:'rgba(255,255,255,.03)'}}},
-    yAxis:{type:'value',min:-8,max:8,interval:2,
+    yAxis:{type:'value',min:-8,max:8,interval:narrow?4:2,
       axisLine:{show:false},axisTick:{show:false},
-      axisLabel:{color:'#6a6f7a',fontSize:11,fontFamily:'Inter',formatter:v=>v>0?`+${v}`:`${v}`},
+      axisLabel:{color:'#6a6f7a',fontSize:narrow?10:11,fontFamily:'Inter',formatter:v=>v>0?`+${v}`:`${v}`},
       splitLine:{lineStyle:{color:'rgba(255,255,255,.04)'}}},
     dataZoom:[{type:'inside',filterMode:'none',zoomOnMouseWheel:true,moveOnMouseMove:true,
         minValueSpan:TF_CFG[currentTF].stepMs*4},
@@ -383,6 +385,7 @@ function updateRanking(){ updateEdgeLabels(); updateLiveLine(); }
 // Collision-avoiding right-edge labels (push apart when values collide)
 function updateEdgeLabels(){
   const el=document.getElementById('edgeLabels'); if(!el)return;
+  if(isNarrow()){ el.innerHTML=''; return; }   // phone: labels hidden (rankings show the values)
   const dz=chart.getOption().dataZoom[0],arr0=DATA[CURRENCIES[0].code];
   let edge=arr0[arr0.length-1][0]; if(dz.endValue!=null)edge=dz.endValue;
   const sel=(chart.getOption().legend[0]||{}).selected||{};
@@ -485,7 +488,7 @@ function onViewport(){
   chart.resize();
   const n=isNarrow();
   if(n!==wasNarrow){ wasNarrow=n;
-    chart.setOption({grid:respGrid(),legend:respLegend(),dataZoom:[{},respSlider()]}); }
+    chart.setOption({grid:respGrid(),legend:respLegend(),yAxis:{interval:n?4:2},dataZoom:[{},respSlider()]}); }
   updateRanking();
 }
 window.addEventListener('resize',onViewport);
