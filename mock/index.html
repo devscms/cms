@@ -195,9 +195,9 @@
   <div class="cal-bar">
     <span class="lbl">Impact</span>
     <div class="seg" id="impSeg">
-      <button data-imp="1" class="active">High</button>
+      <button data-imp="1">High</button>
       <button data-imp="0,1">High + Med</button>
-      <button data-imp="-1,0,1">All</button>
+      <button data-imp="-1,0,1" class="active">All</button>
     </div>
   </div>
   <div class="cal-card">
@@ -464,7 +464,7 @@ async function reload(){
   showLoading(false);
 }
 // ---- View tabs: Chart | Calendar (TradingView economic calendar, lazy-loaded) ----
-let calLoaded=false, calImp='1';   // default: High impact only
+let calLoaded=false, calImp='-1,0,1';   // default: All impacts
 function loadCalendarWidget(){
   const host=document.getElementById('tvCal');
   host.innerHTML='<div class="tradingview-widget-container__widget"></div>';  // reset (filter change re-init)
