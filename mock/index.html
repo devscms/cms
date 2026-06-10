@@ -93,25 +93,31 @@
   /* ---- Responsive: tablet ---- */
   @media (max-width:920px){
     body{overflow-y:auto;overflow-x:hidden}
-    header{height:auto;flex-wrap:wrap;gap:10px;padding:10px 14px}
-    .controls{margin-left:0;width:100%;flex-wrap:wrap;gap:8px}
+    header{position:sticky;top:0;z-index:20;height:auto;flex-wrap:wrap;gap:8px;padding:10px 14px}
+    /* controls: ONE row, swipe sideways (no tall wrapping) */
+    .controls{margin-left:0;width:100%;flex-wrap:nowrap;gap:8px;overflow-x:auto;
+      -webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+    .controls::-webkit-scrollbar{display:none}
+    .controls>*{flex:0 0 auto}
     main{flex-direction:column;height:auto}
-    .chart-wrap{flex:0 0 auto;height:60vh;height:60svh;min-height:340px;padding:8px}
+    .chart-wrap{flex:0 0 auto;height:62vh;height:62svh;min-height:340px;padding:8px}
     .sidebar{width:100%;border-left:none;border-top:1px solid var(--border);
       padding:16px 14px 28px;overflow:visible}
+    /* vertical swipe scrolls the PAGE; horizontal drag still pans the chart */
+    #chart,#chart canvas{touch-action:pan-y !important}
   }
   /* ---- Responsive: phone ---- */
   @media (max-width:560px){
     .lbl{display:none}
-    .seg button{padding:7px 10px;font-size:11px}
-    .btn{padding:7px 10px;font-size:11px}
-    input[type=date]{padding:6px 7px;font-size:11px;max-width:124px}
-    .live{margin-left:auto}
-    .chart-wrap{height:54vh;height:54svh;min-height:300px}
-    .live-line{top:70px}
-    .zoom-ctl{bottom:52px;right:10px}
-    .zoom-ctl button{width:34px;height:34px}
-    .edge-labels{width:56px}
+    .live{display:none}
+    .seg button{padding:8px 11px;font-size:11px}
+    .btn{padding:8px 11px;font-size:11px}
+    input[type=date]{padding:7px;font-size:11px;max-width:120px}
+    .chart-wrap{height:58vh;height:58svh;min-height:300px}
+    .live-line{top:40px;bottom:64px}
+    .zoom-ctl{bottom:44px;right:10px}
+    .zoom-ctl button{width:36px;height:36px}
+    .edge-labels{width:54px}
     .edge-labels div{font-size:10px}
   }
 </style>
@@ -239,10 +245,17 @@ async function loadOlder(){
 
 const chart=echarts.init(document.getElementById('chart'),'dark',{renderer:'canvas'});
 
-// Narrow screens: tighter grid + legend so the 8-item legend wrapping doesn't overlap the plot.
+// Narrow screens: tighter grid, single-row scrollable legend, compact slider.
 function isNarrow(){ return window.innerWidth<=560; }
 function respGrid(){ const n=isNarrow();
-  return {left:8,right:n?60:78,top:n?68:46,bottom:78,containLabel:true}; }
+  return {left:8,right:n?56:78,top:n?40:46,bottom:n?60:78,containLabel:true}; }
+function respLegend(){ const n=isNarrow();
+  return n?{type:'scroll',top:8,itemGap:12,pageIconColor:'#9ca1ad',
+            pageIconInactiveColor:'#3a3f4a',pageIconSize:11,
+            pageTextStyle:{color:'#6a6f7a',fontSize:10,fontFamily:'Inter'}}
+          :{type:'plain',top:12,itemGap:20}; }
+function respSlider(){ const n=isNarrow();
+  return n?{height:20,bottom:8}:{height:26,bottom:18}; }
 function buildOption(){
   const narrow=isNarrow();
   const series=CURRENCIES.map((c,idx)=>({
@@ -259,10 +272,10 @@ function buildOption(){
     backgroundColor:'transparent',
     animationDuration:600,animationEasing:'cubicOut',
     grid:respGrid(),
-    legend:{data:CURRENCIES.map(c=>c.code),top:12,left:'center',
-      icon:'roundRect',itemWidth:14,itemHeight:7,itemGap:narrow?12:20,
+    legend:Object.assign({data:CURRENCIES.map(c=>c.code),left:'center',
+      icon:'roundRect',itemWidth:14,itemHeight:7,
       textStyle:{color:'#9ca1ad',fontSize:12,fontWeight:500,fontFamily:'Inter'},
-      inactiveColor:'#3a3f4a'},
+      inactiveColor:'#3a3f4a'},respLegend()),
     tooltip:{trigger:'axis',confine:true,
       backgroundColor:'#161a22',borderColor:'#2c333d',borderWidth:1,padding:[9,12],
       textStyle:{color:'#d4d7de',fontSize:12,fontFamily:'Inter'},
@@ -290,14 +303,14 @@ function buildOption(){
       splitLine:{lineStyle:{color:'rgba(255,255,255,.04)'}}},
     dataZoom:[{type:'inside',filterMode:'none',zoomOnMouseWheel:true,moveOnMouseMove:true,
         minValueSpan:TF_CFG[currentTF].stepMs*4},
-      {type:'slider',height:26,bottom:18,filterMode:'none',minValueSpan:TF_CFG[currentTF].stepMs*4,
+      Object.assign({type:'slider',filterMode:'none',minValueSpan:TF_CFG[currentTF].stepMs*4,
        backgroundColor:'transparent',borderColor:'#222831',
        fillerColor:'rgba(31,111,235,.10)',
        handleStyle:{color:'#1f6feb',borderColor:'#1f6feb'},
        moveHandleStyle:{color:'rgba(31,111,235,.4)'},
        dataBackground:{lineStyle:{color:'rgba(255,255,255,.10)'},areaStyle:{color:'rgba(255,255,255,.02)'}},
        selectedDataBackground:{lineStyle:{color:'rgba(31,111,235,.4)'},areaStyle:{color:'rgba(31,111,235,.06)'}},
-       textStyle:{color:'#6a6f7a',fontFamily:'Inter'}}],
+       textStyle:{color:'#6a6f7a',fontFamily:'Inter'}},respSlider())],
     series,
   };
 }
@@ -472,7 +485,7 @@ function onViewport(){
   chart.resize();
   const n=isNarrow();
   if(n!==wasNarrow){ wasNarrow=n;
-    chart.setOption({grid:respGrid(),legend:{itemGap:n?12:20}}); }
+    chart.setOption({grid:respGrid(),legend:respLegend(),dataZoom:[{},respSlider()]}); }
   updateRanking();
 }
 window.addEventListener('resize',onViewport);
