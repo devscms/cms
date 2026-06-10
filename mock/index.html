@@ -89,6 +89,31 @@
   .hint{font-size:11px;color:var(--dim);margin-top:18px;line-height:1.8;border-top:1px solid var(--border);padding-top:14px}
   .hint b{color:var(--muted);font-weight:500}
   .note{font-size:10px;color:var(--dim);margin-top:10px;opacity:.75}
+  button,input{-webkit-tap-highlight-color:transparent}
+  /* ---- Responsive: tablet ---- */
+  @media (max-width:920px){
+    body{overflow-y:auto;overflow-x:hidden}
+    header{height:auto;flex-wrap:wrap;gap:10px;padding:10px 14px}
+    .controls{margin-left:0;width:100%;flex-wrap:wrap;gap:8px}
+    main{flex-direction:column;height:auto}
+    .chart-wrap{flex:0 0 auto;height:60vh;height:60svh;min-height:340px;padding:8px}
+    .sidebar{width:100%;border-left:none;border-top:1px solid var(--border);
+      padding:16px 14px 28px;overflow:visible}
+  }
+  /* ---- Responsive: phone ---- */
+  @media (max-width:560px){
+    .lbl{display:none}
+    .seg button{padding:7px 10px;font-size:11px}
+    .btn{padding:7px 10px;font-size:11px}
+    input[type=date]{padding:6px 7px;font-size:11px;max-width:124px}
+    .live{margin-left:auto}
+    .chart-wrap{height:54vh;height:54svh;min-height:300px}
+    .live-line{top:70px}
+    .zoom-ctl{bottom:52px;right:10px}
+    .zoom-ctl button{width:34px;height:34px}
+    .edge-labels{width:56px}
+    .edge-labels div{font-size:10px}
+  }
 </style>
 </head>
 <body>
@@ -214,7 +239,12 @@ async function loadOlder(){
 
 const chart=echarts.init(document.getElementById('chart'),'dark',{renderer:'canvas'});
 
+// Narrow screens: tighter grid + legend so the 8-item legend wrapping doesn't overlap the plot.
+function isNarrow(){ return window.innerWidth<=560; }
+function respGrid(){ const n=isNarrow();
+  return {left:8,right:n?60:78,top:n?68:46,bottom:78,containLabel:true}; }
 function buildOption(){
+  const narrow=isNarrow();
   const series=CURRENCIES.map((c,idx)=>({
     name:c.code,type:'line',data:SDATA[c.code],
     showSymbol:false,smooth:0.3,sampling:'lttb',
@@ -228,12 +258,12 @@ function buildOption(){
   return {
     backgroundColor:'transparent',
     animationDuration:600,animationEasing:'cubicOut',
-    grid:{left:8,right:78,top:46,bottom:78,containLabel:true},
+    grid:respGrid(),
     legend:{data:CURRENCIES.map(c=>c.code),top:12,left:'center',
-      icon:'roundRect',itemWidth:14,itemHeight:7,itemGap:20,
+      icon:'roundRect',itemWidth:14,itemHeight:7,itemGap:narrow?12:20,
       textStyle:{color:'#9ca1ad',fontSize:12,fontWeight:500,fontFamily:'Inter'},
       inactiveColor:'#3a3f4a'},
-    tooltip:{trigger:'axis',
+    tooltip:{trigger:'axis',confine:true,
       backgroundColor:'#161a22',borderColor:'#2c333d',borderWidth:1,padding:[9,12],
       textStyle:{color:'#d4d7de',fontSize:12,fontFamily:'Inter'},
       extraCssText:'border-radius:8px',
@@ -436,7 +466,18 @@ function onZoom(){
 chart.on('dataZoom',onZoom);
 chart.on('legendselectchanged',updateRanking);
 chart.on('finished', updateLiveLine);   // reposition live-line after chart fully renders
-window.addEventListener('resize',()=>{chart.resize();updateRanking();});
+// Resize / rotate / layout-switch (media query) handling — re-fit chart + re-apply narrow grid.
+let wasNarrow=isNarrow();
+function onViewport(){
+  chart.resize();
+  const n=isNarrow();
+  if(n!==wasNarrow){ wasNarrow=n;
+    chart.setOption({grid:respGrid(),legend:{itemGap:n?12:20}}); }
+  updateRanking();
+}
+window.addEventListener('resize',onViewport);
+window.addEventListener('orientationchange',()=>setTimeout(onViewport,250));
+if(window.ResizeObserver) new ResizeObserver(()=>onViewport()).observe(document.querySelector('.chart-card'));
 // Poll latest snapshot — appends a new bar (or updates the current one) as MT5 pushes.
 // Fetch the 2 most recent snapshots — newest=live forming bar, second=last closed bar.
 // Also updates the chart's last bar with the newest data point.
