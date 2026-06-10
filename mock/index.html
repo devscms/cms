@@ -194,10 +194,12 @@
 <main id="calMain" class="calmain" style="display:none">
   <div class="cal-bar">
     <span class="lbl">Impact</span>
+    <!-- TradingView's events widget importance filter is binary: an importanceFilter
+         list WITHOUT -1 (low) flips it to "only high importance" mode (On(e): -1===e.indexOf(-1)).
+         There is no medium tier — so the honest choices are All vs High only. -->
     <div class="seg" id="impSeg">
-      <button data-imp="1">High</button>
-      <button data-imp="0,1">High + Med</button>
       <button data-imp="-1,0,1" class="active">All</button>
+      <button data-imp="0,1">High only</button>
     </div>
   </div>
   <div class="cal-card">
