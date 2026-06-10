@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Economic Calendar — Currency Strength</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161a22; --card:#12161e; --border:#222831; --border2:#2c333d;
+    --text:#d4d7de; --muted:#7d828f; --dim:#565b66;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{font-family:'Inter',system-ui,sans-serif;color:var(--text);background:var(--bg);overflow:hidden;
+    -webkit-font-smoothing:antialiased}
+  header{display:flex;align-items:center;gap:24px;padding:0 22px;height:56px;
+    background:var(--panel);border-bottom:1px solid var(--border)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px}
+  .brand .mark{width:24px;height:24px;border-radius:6px;background:#1f6feb;display:grid;place-items:center;
+    font-size:13px;color:#fff}
+  .brand small{display:block;font-size:10px;font-weight:400;color:var(--muted);margin-top:1px}
+  .seg{display:flex;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .seg button,.seg a{background:var(--panel);border:0;color:var(--muted);padding:6px 14px;cursor:pointer;
+    font:500 12px Inter;transition:.12s;text-decoration:none;display:block}
+  .seg button:hover,.seg a:hover{color:var(--text)}
+  .seg button.active,.seg a.active{background:#1f6feb;color:#fff}
+  .lbl{font-size:11px;color:var(--dim);font-weight:500}
+  .bar-right{display:flex;align-items:center;gap:10px;margin-left:auto}
+  main{height:calc(100% - 56px);padding:12px;display:flex;flex-direction:column}
+  .cal-card{flex:1;min-height:0;position:relative;background:var(--card);
+    border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .cal-card .tradingview-widget-container{position:absolute;inset:0}
+  .cal-card iframe{width:100% !important;height:100% !important;display:block}
+  button{-webkit-tap-highlight-color:transparent}
+  @media (max-width:560px){
+    header{gap:10px;padding:0 12px}
+    .brand small{display:none}
+    .seg button,.seg a{padding:8px 11px;font-size:11px}
+    .lbl{display:none}
+    main{padding:8px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="mark">⌁</div>
+    <div>Currency Strength<small>8 majors</small></div>
+  </div>
+  <div class="seg">
+    <a href="/">Chart</a>
+    <a class="active">Calendar</a>
+  </div>
+  <div class="bar-right">
+    <span class="lbl">Impact</span>
+    <!-- TradingView's events widget importance filter is binary: a list WITHOUT -1 (low)
+         flips it to "only high importance" mode. No medium tier exists. -->
+    <div class="seg" id="impSeg">
+      <button data-imp="-1,0,1" class="active">All</button>
+      <button data-imp="0,1">High only</button>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="cal-card">
+    <div class="tradingview-widget-container" id="tvCal">
+      <div class="tradingview-widget-container__widget"></div>
+    </div>
+  </div>
+</main>
+<script>
+let calImp='-1,0,1';   // default: All impacts
+function loadCalendarWidget(){
+  const host=document.getElementById('tvCal');
+  host.innerHTML='<div class="tradingview-widget-container__widget"></div>';
+  const s=document.createElement('script');
+  s.src='https://s3.tradingview.com/external-embedding/embed-widget-events.js';
+  s.async=true;
+  s.innerHTML=JSON.stringify({colorTheme:'dark',isTransparent:true,width:'100%',height:'100%',
+    locale:'en',importanceFilter:calImp,countryFilter:'us,eu,gb,jp,au,nz,ca,ch'});
+  host.appendChild(s);
+}
+document.querySelectorAll('#impSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#impSeg button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); calImp=b.dataset.imp; loadCalendarWidget();
+});
+loadCalendarWidget();
+</script>
+</body>
+</html>

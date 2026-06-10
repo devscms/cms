@@ -28,10 +28,10 @@
   .controls{display:flex;align-items:center;gap:14px;margin-left:auto}
   .lbl{font-size:11px;color:var(--dim);font-weight:500}
   .seg{display:flex;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-  .seg button{background:var(--panel);border:0;color:var(--muted);padding:6px 14px;cursor:pointer;
-    font:500 12px Inter;transition:.12s}
-  .seg button:hover{color:var(--text)}
-  .seg button.active{background:#1f6feb;color:#fff}
+  .seg button,.seg a{background:var(--panel);border:0;color:var(--muted);padding:6px 14px;cursor:pointer;
+    font:500 12px Inter;transition:.12s;text-decoration:none;display:block}
+  .seg button:hover,.seg a:hover{color:var(--text)}
+  .seg button.active,.seg a.active{background:#1f6feb;color:#fff}
   input[type=date]{background:var(--bg);color:var(--text);border:1px solid var(--border2);
     padding:6px 9px;border-radius:9px;font:500 12px Inter;color-scheme:dark;cursor:pointer}
   input[type=date]:hover{border-color:#3a424d}
@@ -90,13 +90,6 @@
   .hint b{color:var(--muted);font-weight:500}
   .note{font-size:10px;color:var(--dim);margin-top:10px;opacity:.75}
   button,input{-webkit-tap-highlight-color:transparent}
-  /* Calendar view (TradingView economic calendar embed) */
-  .calmain{height:calc(100% - 56px);padding:12px;flex-direction:column}
-  .cal-bar{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex:0 0 auto}
-  .cal-card{flex:1;min-height:0;position:relative;background:var(--card);
-    border:1px solid var(--border);border-radius:14px;overflow:hidden}
-  .cal-card .tradingview-widget-container{position:absolute;inset:0}
-  .cal-card iframe{width:100% !important;height:100% !important;display:block}
   /* ---- Responsive: tablet ---- */
   @media (max-width:920px){
     body{overflow-y:auto;overflow-x:hidden}
@@ -110,7 +103,6 @@
     .chart-wrap{flex:0 0 auto;height:62vh;height:62svh;min-height:340px;padding:8px}
     .sidebar{width:100%;border-left:none;border-top:1px solid var(--border);
       padding:16px 14px 28px;overflow:visible}
-    .calmain{height:calc(100svh - 78px);padding:8px}
     /* vertical swipe scrolls the PAGE; horizontal drag still pans the chart */
     #chart,#chart canvas{touch-action:pan-y !important}
   }
@@ -139,8 +131,8 @@
     <div>Currency Strength<small>8 majors</small></div>
   </div>
   <div class="seg" id="viewTabs">
-    <button data-view="chart" class="active">Chart</button>
-    <button data-view="calendar">Calendar</button>
+    <button class="active">Chart</button>
+    <a href="/calender/">Calendar</a>
   </div>
   <div class="controls">
     <span class="lbl">Timeframe</span>
@@ -190,23 +182,6 @@
     </div>
     <div class="note">Connected to API · sample data until MT5 producer goes live.</div>
   </aside>
-</main>
-<main id="calMain" class="calmain" style="display:none">
-  <div class="cal-bar">
-    <span class="lbl">Impact</span>
-    <!-- TradingView's events widget importance filter is binary: an importanceFilter
-         list WITHOUT -1 (low) flips it to "only high importance" mode (On(e): -1===e.indexOf(-1)).
-         There is no medium tier — so the honest choices are All vs High only. -->
-    <div class="seg" id="impSeg">
-      <button data-imp="-1,0,1" class="active">All</button>
-      <button data-imp="0,1">High only</button>
-    </div>
-  </div>
-  <div class="cal-card">
-    <div class="tradingview-widget-container" id="tvCal">
-      <div class="tradingview-widget-container__widget"></div>
-    </div>
-  </div>
 </main>
 <script>
 // Clean, professional palette (Tableau-style) mapped to your currencies
@@ -465,34 +440,6 @@ async function reload(){
   await panelsP;
   showLoading(false);
 }
-// ---- View tabs: Chart | Calendar (TradingView economic calendar, lazy-loaded) ----
-let calLoaded=false, calImp='-1,0,1';   // default: All impacts
-function loadCalendarWidget(){
-  const host=document.getElementById('tvCal');
-  host.innerHTML='<div class="tradingview-widget-container__widget"></div>';  // reset (filter change re-init)
-  const s=document.createElement('script');
-  s.src='https://s3.tradingview.com/external-embedding/embed-widget-events.js';
-  s.async=true;
-  s.innerHTML=JSON.stringify({colorTheme:'dark',isTransparent:true,width:'100%',height:'100%',
-    locale:'en',importanceFilter:calImp,countryFilter:'us,eu,gb,jp,au,nz,ca,ch'});
-  host.appendChild(s);
-}
-document.querySelectorAll('#impSeg button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('#impSeg button').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active'); calImp=b.dataset.imp;
-  if(calLoaded) loadCalendarWidget();
-});
-function setView(v){
-  document.querySelectorAll('#viewTabs button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
-  const isChart=(v==='chart');
-  document.getElementById('chartMain').style.display=isChart?'':'none';
-  document.getElementById('calMain').style.display=isChart?'none':'';
-  document.querySelector('.controls').style.display=isChart?'':'none';  // chart-only controls
-  if(isChart){ chart.resize(); updateRanking(); }
-  else if(!calLoaded){ calLoaded=true; loadCalendarWidget(); }
-}
-document.querySelectorAll('#viewTabs button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
-
 document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#seg button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');currentTF=b.dataset.tf;reload();});

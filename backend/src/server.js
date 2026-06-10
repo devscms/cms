@@ -35,6 +35,8 @@ function resolveMockDir() {
 const mockDir = resolveMockDir();
 if (mockDir) {
   app.use('/', express.static(mockDir));
+  // Dedicated calendar page — support both spellings
+  app.get(['/calendar', '/calender'], (req, res) => res.sendFile(path.join(mockDir, 'calendar.html')));
   console.log('[server] serving frontend from:', mockDir);
 } else {
   console.warn('[server] WARN: frontend folder not found — only /api routes will work');
