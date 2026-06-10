@@ -91,8 +91,12 @@
   .note{font-size:10px;color:var(--dim);margin-top:10px;opacity:.75}
   button,input{-webkit-tap-highlight-color:transparent}
   /* Calendar view (TradingView economic calendar embed) */
-  .calmain{height:calc(100% - 56px);padding:12px}
-  .cal-card{height:100%;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .calmain{height:calc(100% - 56px);padding:12px;flex-direction:column}
+  .cal-bar{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex:0 0 auto}
+  .cal-card{flex:1;min-height:0;position:relative;background:var(--card);
+    border:1px solid var(--border);border-radius:14px;overflow:hidden}
+  .cal-card .tradingview-widget-container{position:absolute;inset:0}
+  .cal-card iframe{width:100% !important;height:100% !important;display:block}
   /* ---- Responsive: tablet ---- */
   @media (max-width:920px){
     body{overflow-y:auto;overflow-x:hidden}
@@ -188,9 +192,17 @@
   </aside>
 </main>
 <main id="calMain" class="calmain" style="display:none">
+  <div class="cal-bar">
+    <span class="lbl">Impact</span>
+    <div class="seg" id="impSeg">
+      <button data-imp="1" class="active">High</button>
+      <button data-imp="0,1">High + Med</button>
+      <button data-imp="-1,0,1">All</button>
+    </div>
+  </div>
   <div class="cal-card">
-    <div class="tradingview-widget-container" id="tvCal" style="height:100%">
-      <div class="tradingview-widget-container__widget" style="height:100%"></div>
+    <div class="tradingview-widget-container" id="tvCal">
+      <div class="tradingview-widget-container__widget"></div>
     </div>
   </div>
 </main>
@@ -452,16 +464,22 @@ async function reload(){
   showLoading(false);
 }
 // ---- View tabs: Chart | Calendar (TradingView economic calendar, lazy-loaded) ----
-let calLoaded=false;
+let calLoaded=false, calImp='1';   // default: High impact only
 function loadCalendarWidget(){
   const host=document.getElementById('tvCal');
+  host.innerHTML='<div class="tradingview-widget-container__widget"></div>';  // reset (filter change re-init)
   const s=document.createElement('script');
   s.src='https://s3.tradingview.com/external-embedding/embed-widget-events.js';
   s.async=true;
   s.innerHTML=JSON.stringify({colorTheme:'dark',isTransparent:true,width:'100%',height:'100%',
-    locale:'en',importanceFilter:'0,1',countryFilter:'us,eu,gb,jp,au,nz,ca,ch'});
+    locale:'en',importanceFilter:calImp,countryFilter:'us,eu,gb,jp,au,nz,ca,ch'});
   host.appendChild(s);
 }
+document.querySelectorAll('#impSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#impSeg button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); calImp=b.dataset.imp;
+  if(calLoaded) loadCalendarWidget();
+});
 function setView(v){
   document.querySelectorAll('#viewTabs button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));
   const isChart=(v==='chart');
